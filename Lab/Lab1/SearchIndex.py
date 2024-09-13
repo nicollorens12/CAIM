@@ -43,7 +43,7 @@ if __name__ == '__main__':
         query = ' '.join(args.query)
 
     try:
-        client = Elasticsearch(timeout=1000)
+        client = Elasticsearch( hosts=['http://localhost:9200'], request_timeout=1000)
         s = Search(using=client, index=index)
 
 

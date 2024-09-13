@@ -73,7 +73,7 @@ if __name__ == '__main__':
         ldocs.append({'_op_type': 'index', '_index': index, 'path': f, 'text': text})
 
     # Working with ElasticSearch
-    client = Elasticsearch(timeout=1000)
+    client = Elasticsearch( hosts=['http://localhost:9200'], request_timeout=1000)
     try:
         # Drop index if it exists
         ind = Index(index, using=client)
