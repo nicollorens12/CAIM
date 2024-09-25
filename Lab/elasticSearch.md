@@ -5,7 +5,11 @@ Install ElasticSearch with:
 brew tap elastic/tap
 brew install elastic/tap/elasticsearch-full
 ```
-Java JDK is needed
+Java JDK is needed and ES_JAVA_HOME needs to be set
+```cmd
+nano ~/.zshrc
+export ES_JAVA_HOME="$(brew --prefix openjdk)"
+```
 
 First start of ElasticSearch:
 ```cmd
