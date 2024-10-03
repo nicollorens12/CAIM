@@ -1,1 +1,0 @@
-Contabilizar % de palabras que se eliminan al quitar stopwords
