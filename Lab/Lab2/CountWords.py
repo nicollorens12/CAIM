@@ -1,63 +1,84 @@
-"""
-.. module:: CountWords
-
-CountWords
-*************
-
-:Description: CountWords
-
-    Generates a list with the counts and the words in the 'text' field of the documents in an index
-
-:Authors: bejar
-    
-
-:Version: 
-
-:Created on: 04/07/2017 11:58 
-
-"""
-
-from __future__ import print_function
 from elasticsearch import Elasticsearch
 from elasticsearch.helpers import scan
 from elasticsearch.exceptions import NotFoundError, TransportError
 
-import argparse
+class ElasticFunctionals:
+    def __init__(self, client):
+        """
+        Constructor para inicializar la clase con un cliente de Elasticsearch.
 
-__author__ = 'bejar'
+        :param client: Instancia del cliente de Elasticsearch
+        """
+        self.client = client
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--index', default=None, required=True, help='Index to search')
-    parser.add_argument('--alpha', action='store_true', default=False, help='Sort words alphabetically')
-    args = parser.parse_args()
+    def count_words(self, index, alpha=False):
+        """
+        Function to count the words in the 'text' field of an Elasticsearch index.
+        
+        :param index: Name of the index
+        :param alpha: Sort alphabetically if True, else by frequency
+        """
+        count = 0
+        try:
+            voc = {}
+            sc = scan(self.client, index=index, query={"query": {"match_all": {}}})
+            
+            for s in sc:
+                try:
+                    tv = self.client.termvectors(index=index, id=s['_id'], fields=['text'])
+                    if 'text' in tv['term_vectors']:
+                        for t in tv['term_vectors']['text']['terms']:
+                            if t in voc:
+                                voc[t] += tv['term_vectors']['text']['terms'][t]['term_freq']
+                            else:
+                                voc[t] = tv['term_vectors']['text']['terms'][t]['term_freq']
+                except TransportError:
+                    pass
+            
+            lpal = [(v, voc[v]) for v in voc]
 
-    index = args.index
+            ## Sort alphabetically or by frequency
+            #for pal, cnt in sorted(lpal, key=lambda x: x[0 if alpha else 1]):
+            #    print(f'{cnt}, {pal}')
+            #
+            #print('--------------------')
+            #print(f'{len(lpal)} Words')
+            count = len(lpal)
 
-    try:
-        client = Elasticsearch( hosts=['http://localhost:9200'], request_timeout=1000)
-        voc = {}
-        sc = scan(client, index=index, query={"query" : {"match_all": {}}})
-        for s in sc:
-            try:
-                tv = client.termvectors(index=index, id=s['_id'], fields=['text'])
-                if 'text' in tv['term_vectors']:
-                    for t in tv['term_vectors']['text']['terms']:
-                        if t in voc:
-                            voc[t] += tv['term_vectors']['text']['terms'][t]['term_freq']
-                        else:
-                            voc[t] = tv['term_vectors']['text']['terms'][t]['term_freq']
-            except TransportError:
-                pass
-        lpal = []
+        except NotFoundError:
+            print(f'Index {index} does not exist')
 
-        for v in voc:
-            lpal.append((v.encode("utf-8", "ignore"), voc[v]))
+        return count
+    
+    def count_word_frequency(self, index, alpha=False):
+        """
+        Function to count the words in the 'text' field of an Elasticsearch index.
+        
+        :param index: Name of the index
+        :param alpha: Sort alphabetically if True, else by frequency
+        :return: List of tuples containing (word, count)
+        """
+        try:
+            voc = {}
+            sc = scan(self.client, index=index, query={"query": {"match_all": {}}})
+            
+            for s in sc:
+                try:
+                    tv = self.client.termvectors(index=index, id=s['_id'], fields=['text'])
+                    if 'text' in tv['term_vectors']:
+                        for t in tv['term_vectors']['text']['terms']:
+                            if t in voc:
+                                voc[t] += tv['term_vectors']['text']['terms'][t]['term_freq']
+                            else:
+                                voc[t] = tv['term_vectors']['text']['terms'][t]['term_freq']
+                except TransportError:
+                    pass
+            
+            # Convert the vocabulary to a sorted list of tuples (word, count)
+            sorted_words = sorted(voc.items(), key=lambda x: x[1], reverse=True)
+            return sorted_words  # Devuelve la lista de palabras y sus frecuencias
+        
+        except NotFoundError:
+            print(f'Index {index} does not exist')
+            return []
 
-
-        for pal, cnt in sorted(lpal, key=lambda x: x[0 if args.alpha else 1]):
-            print(f'{cnt}, {pal.decode("utf-8")}')
-        print('--------------------')
-        print(f'{len(lpal)} Words')
-    except NotFoundError:
-        print(f'Index {index} does not exists')

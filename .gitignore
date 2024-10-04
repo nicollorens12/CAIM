@@ -6,3 +6,6 @@ Lab/.DS_Store
 */*/*/DS_Store
 */.idea
 !InformeZipf.ipynb
+/Lab/Lab2/__pycache__
+/.vscode
+/Lab/Lab2/.venv
