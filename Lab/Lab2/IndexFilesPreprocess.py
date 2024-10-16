@@ -1,131 +1,106 @@
-"""
-.. module:: IndexFilesPreprocess
-
-IndexFiles
-******
-
-:Description: IndexFilesPreprocess
-
-    Indexes a set of files under the directory passed as a parameter (--path)
-    in the index name passed as a parameter (--index)
-
-    Add configuration of the default analizer: tokenizer  (--token) and filter (--filter)
-
-    --filter must be always the last flag
-
-    If the index exists it is dropped and created new
-
-    Documentation for the analyzer configuration:
-
-    https://www.elastic.co/guide/en/elasticsearch/reference/current/analysis.html
-
-:Authors:
-    bejar
-
-:Version: 
-
-:Date:  23/06/2017
-"""
-
 from elasticsearch import Elasticsearch
 from elasticsearch.helpers import bulk
 from elasticsearch.exceptions import NotFoundError
-import argparse
+from elasticsearch_dsl import Index, analyzer, tokenizer
 import os
 import codecs
-from elasticsearch_dsl import Index, analyzer, tokenizer
 
+class IndexFiles:
+    def __init__(self, client, index, token='standard', filters=['lowercase']):
+        """
+        Constructor para inicializar la clase con un cliente de Elasticsearch, el índice, el tokenizador y los filtros.
 
-def generate_files_list(path):
-    """
-    Generates a list of all the files inside a path
-    :param path:
-    :return:
-    """
-    if path[-1] == '/':
-        path = path[:-1]
+        :param client: Instancia del cliente de Elasticsearch
+        :param index: Nombre del índice donde se almacenarán los archivos
+        :param token: Tokenizador para el análisis del texto (default: 'standard')
+        :param filters: Filtros para el análisis del texto (default: ['lowercase'])
+        """
+        self.client = client
+        self.index = index
+        self.token = token
+        self.filters = filters
+        self.my_analyzer = analyzer(
+            'default',
+            type='custom',
+            tokenizer=tokenizer(self.token),
+            filter=self.filters
+        )
 
-    lfiles = []
+    def generate_files_list(self, path):
+        """
+        Genera una lista de todos los archivos dentro de un directorio.
 
-    for lf in os.walk(path):
-        if lf[2]:
-            for f in lf[2]:
-                lfiles.append(lf[0] + '/' + f)
-    return lfiles
+        :param path: Ruta del directorio
+        :return: Lista de rutas de archivos
+        """
+        if path[-1] == '/':
+            path = path[:-1]
 
+        lfiles = []
+        for root, _, files in os.walk(path):
+            for f in files:
+                lfiles.append(os.path.join(root, f))
+        return lfiles
 
-__author__ = 'bejar'
+    def index_files(self, path):
+        """
+        Indexa todos los archivos dentro de un directorio especificado.
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--path', required=True, default=None, help='Path to the files')
-    parser.add_argument('--index', required=True, default=None, help='Index for the files')
-    parser.add_argument('--token', default='standard', choices=['standard', 'whitespace', 'classic', 'letter'],
-                        help='Text tokenizer')
-    parser.add_argument('--filter', default=['lowercase'], nargs=argparse.REMAINDER, help='Text filter: lowercase, '
-                                                                                          'asciifolding, stop, porter_stem, kstem, snowball')
+        :param path: Ruta del directorio
+        """
+        lfiles = self.generate_files_list(path)
+        print(f'Indexando {len(lfiles)} archivos')
+        print('Leyendo archivos...')
 
-    args = parser.parse_args()
+        ldocs = []
+        for f in lfiles:
+            with codecs.open(f, "r", encoding='iso-8859-1') as ftxt:
+                text = ftxt.read()
+            ldocs.append({'_op_type': 'index', '_index': self.index, 'path': f, 'text': text})
 
-    path = args.path
-    index = args.index
+        # Elimina el índice si ya existe y luego crea uno nuevo
+        try:
+            ind = Index(self.index, using=self.client)
+            ind.delete()
+        except NotFoundError:
+            pass
 
-    # check if the filters are valid
-    for f in args.filter:
-        if f not in ['lowercase', 'asciifolding', 'stop', 'stemmer', 'porter_stem', 'kstem', 'snowball']:
-            raise NameError(
-                'Invalid filter must be a subset of: lowercase, asciifolding, stop, porter_stem, kstem, snowball')
+        ind.settings(number_of_shards=1)
+        ind.create()
+        ind = Index(self.index, using=self.client)
 
-    ldocs = []
+        # Configura el analizador por defecto
+        ind.close()  # el índice debe estar cerrado para configurar el analizador
+        ind.analyzer(self.my_analyzer)
 
-    # Reads all the documents in a directory tree and generates an index operation for each
-    lfiles = generate_files_list(path)
-    print('Indexing %d files' % len(lfiles))
-    print('Reading files ...')
-    for f in lfiles:
-        ftxt = codecs.open(f, "r", encoding='iso-8859-1')
-        text = ''
-        for line in ftxt:
-            text += line
-        # Insert operation for a document with fields' path' and 'text'
-        ldocs.append({'_op_type': 'index', '_index': index, 'path': f, 'text': text})
-
-    client = Elasticsearch( hosts=['http://localhost:9200'], request_timeout=1000)
-
-    # Tokenizers: whitespace classic standard letter
-    my_analyzer = analyzer('default',
-                           type='custom',
-                           tokenizer=tokenizer(args.token),
-                           filter=args.filter
-                           )
-
-    try:
-        # Drop index if it exists
-        ind = Index(index, using=client)
-        ind.delete()
-    except NotFoundError:
-        pass
-    # then create it
-    ind.settings(number_of_shards=1)
-    ind.create()
-    ind = Index(index, using=client)
-
-    # configure default analyzer
-    ind.close()  # index must be closed for configuring analyzer
-    ind.analyzer(my_analyzer)
-
-    # configure the path field so it is not tokenized and we can do exact match search
-    client.indices.put_mapping(index=index, body={
-        "properties": {
-            "path": {
-                "type": "keyword",
+        # Configura el campo "path" para que no sea tokenizado (coincidencia exacta)
+        self.client.indices.put_mapping(index=self.index, body={
+            "properties": {
+                "path": {
+                    "type": "keyword",
+                }
             }
-        }
-    })
+        })
 
-    ind.save()
-    ind.open()
-    print("Index settings=", ind.get_settings())
-    # Bulk execution of elastic search operations (faster than executing all one by one)
-    print('Indexing ...')
-    bulk(client, ldocs)
+        ind.save()
+        ind.open()
+        print("Configuraciones del índice:", ind.get_settings())
+
+        # Ejecuta las operaciones de indexación de forma masiva
+        print('Indexando documentos...')
+        bulk(self.client, ldocs)
+
+    def get_indexed_paths(self):
+        """
+        Recupera los paths de todos los documentos indexados.
+
+        :return: Lista de paths de documentos indexados
+        """
+        s = self.client.search(index=self.index, body={
+            "_source": ["path"],
+            "query": {
+                "match_all": {}
+            }
+        })
+
+        return [hit["_source"]["path"] for hit in s['hits']['hits']]

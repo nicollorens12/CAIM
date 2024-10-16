@@ -1,191 +1,166 @@
-"""
-.. module:: TFIDFViewer
-
-TFIDFViewer
-******
-
-:Description: TFIDFViewer
-
-    Receives two paths of files to compare (the paths have to be the ones used when indexing the files)
-
-:Authors:
-    bejar
-
-:Version: 
-
-:Date:  05/07/2017
-"""
-
 from elasticsearch import Elasticsearch
 from elasticsearch.exceptions import NotFoundError
 from elasticsearch.client import CatClient
 from elasticsearch_dsl import Search
 from elasticsearch_dsl.query import Q
 
-import argparse
-
 import numpy as np
 
-__author__ = 'bejar'
+class TFIDFViewer:
+    def __init__(self, client):
+        """
+        Constructor para inicializar la clase con un cliente de Elasticsearch.
 
-def search_file_by_path(client, index, path):
-    """
-    Search for a file using its path
+        :param client: Instancia del cliente de Elasticsearch
+        """
+        self.client = client
 
-    :param path:
-    :return:
-    """
-    s = Search(using=client, index=index)
-    q = Q('match', path=path)  # exact search in the path field
-    s = s.query(q)
-    result = s.execute()
+    def search_file_by_path(self, index, path):
+        """
+        Busca un archivo utilizando su ruta.
 
-    lfiles = [r for r in result]
-    if len(lfiles) == 0:
-        raise NameError(f'File [{path}] not found')
-    else:
-        return lfiles[0].meta.id
+        :param index: Índice donde se busca.
+        :param path: Ruta del archivo a buscar.
+        :return: ID del documento encontrado.
+        """
+        s = Search(using=self.client, index=index)
+        q = Q('match', path=path)  # búsqueda exacta en el campo de ruta
+        s = s.query(q)
+        result = s.execute()
 
-
-def document_term_vector(client, index, id):
-    """
-    Returns the term vector of a document and its statistics a two sorted list of pairs (word, count)
-    The first one is the frequency of the term in the document, the second one is the number of documents
-    that contain the term
-
-    :param client:
-    :param index:
-    :param id:
-    :return:
-    """
-    termvector = client.termvectors(index=index, id=id, fields=['text'],
-                                    positions=False, term_statistics=True)
-
-    file_td = {}
-    file_df = {}
-
-    if 'text' in termvector['term_vectors']:
-        for t in termvector['term_vectors']['text']['terms']:
-            file_td[t] = termvector['term_vectors']['text']['terms'][t]['term_freq']
-            file_df[t] = termvector['term_vectors']['text']['terms'][t]['doc_freq']
-    return sorted(file_td.items()), sorted(file_df.items())
-
-
-def toTFIDF(client, index, file_id):
-    """
-    Returns the term weights of a document
-
-    :param file:
-    :return:
-    """
-
-    # Get the frequency of the term in the document, and the number of documents
-    # that contain the term
-    file_tv, file_df = document_term_vector(client, index, file_id)
-
-    max_freq = max([f for _, f in file_tv])
-
-    dcount = doc_count(client, index)
-
-    tfidfw = []
-    for (t, w),(_, df) in zip(file_tv, file_df):
-        tf = w / max_freq
-        idf = np.log2(dcount / df)
-        tfidfw.append((t, tf * idf))
-        pass
-
-    return normalize(tfidfw)
-
-def print_term_weigth_vector(twv):
-    """
-    Prints the term vector and the correspondig weights
-    :param twv:
-    :return:
-    """
-    for t, w in twv:
-        print(f'{t} -> {w}')
-    pass
-
-
-def normalize(tw):
-    """
-    Normalizes the weights in t so that they form a unit-length vector
-    It is assumed that not all weights are 0
-    :param tw:
-    :return:
-    """
-    norm = np.sqrt(sum([w * w for _, w in tw]))
-    return [(t, w / norm) for t, w in tw]
-
-
-def cosine_similarity(tw1, tw2):
-    """
-    Computes the cosine similarity between two weight vectors, terms are alphabetically ordered
-    :param tw1:
-    :param tw2:
-    :return:
-    """
-    i = 0
-    j = 0
-    sim = 0
-    while i < len(tw1) and j < len(tw2):
-        if tw1[i][0] == tw2[j][0]:
-            sim += tw1[i][1] * tw2[j][1]
-            i += 1
-            j += 1
-        elif tw1[i][0] < tw2[j][0]:
-            i += 1
+        lfiles = [r for r in result]
+        if len(lfiles) == 0:
+            raise NameError(f'File [{path}] not found')
         else:
-            j += 1
-    return sim
+            return lfiles[0].meta.id
 
-def doc_count(client, index):
-    """
-    Returns the number of documents in an index
+    def document_term_vector(self, index, doc_id):
+        """
+        Retorna el vector de términos de un documento y sus estadísticas, en forma de dos listas
+        ordenadas de pares (palabra, cantidad).
 
-    :param client:
-    :param index:
-    :return:
-    """
-    return int(CatClient(client).count(index=[index], format='json')[0]['count'])
+        :param index: Índice donde está el documento.
+        :param doc_id: ID del documento.
+        :return: Listas de frecuencia de términos y frecuencia de documentos.
+        """
+        termvector = self.client.termvectors(index=index, id=doc_id, fields=['text'],
+                                             positions=False, term_statistics=True)
+
+        file_td = {}
+        file_df = {}
+
+        if 'text' in termvector['term_vectors']:
+            for t in termvector['term_vectors']['text']['terms']:
+                file_td[t] = termvector['term_vectors']['text']['terms'][t]['term_freq']
+                file_df[t] = termvector['term_vectors']['text']['terms'][t]['doc_freq']
+        return sorted(file_td.items()), sorted(file_df.items())
+
+    def to_tfidf(self, index, doc_id):
+        """
+        Calcula los pesos TF-IDF de un documento.
+
+        :param index: Índice donde está el documento.
+        :param doc_id: ID del documento.
+        :return: Vector de pesos TF-IDF normalizados.
+        """
+        # Obtener las frecuencias de los términos en el documento y la cantidad de documentos
+        file_tv, file_df = self.document_term_vector(index, doc_id)
+
+        max_freq = max([f for _, f in file_tv])
+        dcount = self.doc_count(index)
+
+        tfidfw = []
+        for (t, w),(_, df) in zip(file_tv, file_df):
+            tf = w / max_freq
+            idf = np.log2(dcount / df)
+            tfidfw.append((t, tf * idf))
+
+        return self.normalize(tfidfw)
+
+    def normalize(self, tw):
+        """
+        Normaliza los pesos para que formen un vector unitario.
+
+        :param tw: Vector de términos y pesos.
+        :return: Vector de pesos normalizado.
+        """
+        norm = np.sqrt(sum([w * w for _, w in tw]))
+        return [(t, w / norm) for t, w in tw]
+
+    def cosine_similarity(self, tw1, tw2):
+        """
+        Calcula la similitud coseno entre dos vectores de peso, ordenados alfabéticamente.
+
+        :param tw1: Primer vector de términos y pesos.
+        :param tw2: Segundo vector de términos y pesos.
+        :return: Similitud coseno entre los dos vectores.
+        """
+        i = 0
+        j = 0
+        sim = 0
+        while i < len(tw1) and j < len(tw2):
+            if tw1[i][0] == tw2[j][0]:
+                sim += tw1[i][1] * tw2[j][1]
+                i += 1
+                j += 1
+            elif tw1[i][0] < tw2[j][0]:
+                i += 1
+            else:
+                j += 1
+        return sim
+
+    def doc_count(self, index):
+        """
+        Retorna la cantidad de documentos en un índice.
+
+        :param index: Índice a consultar.
+        :return: Cantidad de documentos en el índice.
+        """
+        return int(CatClient(self.client).count(index=[index], format='json')[0]['count'])
+
+    def compare_files(self, index1, file1_path, index2, file2_path, print_tfidf=False):
+        """
+        Compara dos archivos calculando la similitud coseno de sus vectores TF-IDF,
+        permitiendo que los archivos provengan de diferentes índices.
+
+        :param index1: Índice donde está el primer documento.
+        :param index2: Índice donde está el segundo documento.
+        :param file1_path: Ruta del primer archivo.
+        :param file2_path: Ruta del segundo archivo.
+        :param print_tfidf: Si es True, imprime los vectores TF-IDF.
+        :return: Similitud coseno entre los dos archivos.
+        """
+        try:
+            # Obtener los IDs de los archivos en sus respectivos índices
+            file1_id = self.search_file_by_path(index1, file1_path)
+            file2_id = self.search_file_by_path(index2, file2_path)
+
+            # Calcular los vectores TF-IDF para cada archivo en su índice
+            file1_tw = self.to_tfidf(index1, file1_id)
+            file2_tw = self.to_tfidf(index2, file2_id)
+
+            if print_tfidf:
+                print(f'TFIDF FILE {file1_path} from index {index1}')
+                self.print_term_weight_vector(file1_tw)
+                print('---------------------')
+                print(f'TFIDF FILE {file2_path} from index {index2}')
+                self.print_term_weight_vector(file2_tw)
+                print('---------------------')
+
+            # Calcular y retornar la similitud coseno entre ambos vectores TF-IDF
+            similarity = self.cosine_similarity(file1_tw, file2_tw)
+            return similarity
+
+        except NotFoundError as e:
+            print(f'Index {index1} or {index2} does not exist: {str(e)}')
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--index', default=None, required=True, help='Index to search')
-    parser.add_argument('--files', default=None, required=True, nargs=2, help='Paths of the files to compare')
-    parser.add_argument('--print', default=False, action='store_true', help='Print TFIDF vectors')
+    def print_term_weight_vector(self, twv):
+        """
+        Imprime el vector de términos y sus correspondientes pesos.
 
-    args = parser.parse_args()
-
-
-    index = args.index
-
-    file1 = args.files[0]
-    file2 = args.files[1]
-
-    client = Elasticsearch( hosts=['http://localhost:9200'], request_timeout=1000)
-
-    try:
-
-        # Get the files ids
-        file1_id = search_file_by_path(client, index, file1)
-        file2_id = search_file_by_path(client, index, file2)
-
-        # Compute the TF-IDF vectors
-        file1_tw = toTFIDF(client, index, file1_id)
-        file2_tw = toTFIDF(client, index, file2_id)
-
-        if args.print:
-            print(f'TFIDF FILE {file1}')
-            print_term_weigth_vector(file1_tw)
-            print ('---------------------')
-            print(f'TFIDF FILE {file2}')
-            print_term_weigth_vector(file2_tw)
-            print ('---------------------')
-
-        print(f"Similarity = {cosine_similarity(file1_tw, file2_tw):3.5f}")
-
-    except NotFoundError:
-        print(f'Index {index} does not exists')
-
+        :param twv: Vector de términos y pesos.
+        :return: None
+        """
+        for t, w in twv:
+            print(f'{t} -> {w}')
