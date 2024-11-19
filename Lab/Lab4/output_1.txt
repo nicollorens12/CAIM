@@ -1,0 +1,29 @@
+Reading Airport file from airports.txt
+There were 5740 Airports with IATA code
+Reading Routes file from routes.txt
+There were 39387 routes
+#Iterations: 110
+Time of computePageRanks(): 1.762573003768921
+Sum of Page Ranks: 0.9999999999999873
+Top 10 airports by PageRank:
+ATL	0.005175	Hartsfield Jackson Atlanta Intl, United States
+FRA	0.005051	Frankfurt Main, Germany
+ORD	0.004826	Chicago Ohare Intl, United States
+DFW	0.004637	Dallas Fort Worth Intl, United States
+AMS	0.004548	Schiphol, Netherlands
+CDG	0.004545	Charles De Gaulle, France
+DEN	0.004531	Denver Intl, United States
+IST	0.004445	Ataturk, Turkey
+PEK	0.004290	Capital Intl, China
+DME	0.004080	Domododevo, Russia
+Bottom 10 airports by PageRank:
+HFN	0.000015	Hornafjordur, Iceland
+HZK	0.000015	Husavik, Iceland
+PFJ	0.000015	Patreksfjordur, Iceland
+SIJ	0.000015	Siglufjordur, Iceland
+VEY	0.000015	Vestmannaeyjar, Iceland
+YAV	0.000015	Winnipeg St Andrews, Canada
+YAW	0.000015	Shearwater, Canada
+YAZ	0.000015	Tofino, Canada
+YBB	0.000015	Kugaaruk, Canada
+YBR	0.000015	Brandon Muni, Canada
