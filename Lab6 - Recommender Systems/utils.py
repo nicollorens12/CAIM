@@ -38,23 +38,18 @@ def load_dataset_from_source(path_to_ml_latest_small: str) -> dict:
     return dataset
 
 
-def split_users(ratings: object , k: int = 5) -> tuple: 
+def split_users(ratings: object, k: int = 5) -> tuple: 
     """
-    Splits user ratings into training and validation sets.
-    
-    Args:
-        ratings (DataFrame): The input ratings DataFrame containing "userId" column.
-        k (int): The number of ratings to include in the validation set for each user.
-    
-    Returns:
-        Tuple of DataFrames: Two DataFrames, the first containing training data, and the second containing validation data.
+    Splits user ratings into training and validation sets, ensuring all users have ratings in both sets.
     """
     ratings_train, rating_validation = [], []
-        
+      
     for idx, ratings_users in ratings.groupby("userId"):
         ratings_users = ratings_users.sample(frac=1, random_state=42)
-        rating_validation.append(ratings_users.iloc[:k]) # First top k rows
-        ratings_train.append(ratings_users.iloc[k:]) # Remaining M-k rows
+        # Ensure at least one rating in the training set
+        split_index = max(1, min(len(ratings_users) - 1, k))  
+        rating_validation.append(ratings_users.iloc[:split_index])
+        ratings_train.append(ratings_users.iloc[split_index:])
         
     return pd.concat(ratings_train), pd.concat(rating_validation)
 
