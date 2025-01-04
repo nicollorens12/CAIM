@@ -1,7 +1,3 @@
-# CAIM Laboratory Assignments
-
-This repository contains the laboratory assignments for the **Search and Analysis of Big Data (CAIM)** course during the 2024-2025 Q1 term.
-
 ## General Information
 
 This assigments where made with [Ricardo López](https://github.com/RLPUPC) for Search and Analysis of Big Data (CAIM) 2024-2025 Q1 course at Universitat Politècnica de Catalunya (UPC).
